@@ -1,7 +1,7 @@
 Rokae_rci/build/
 
-yolov5/yolov5m.pt
-yolov5/yolov5s.pt
-yolov5/__pycache__/
-yolov5/runs/
-yolov5/trained_models/
+RCM_yolov5/yolov5m.pt
+RCM_yolov5/yolov5s.pt
+RCM_yolov5/__pycache__/
+RCM_yolov5/runs/
+RCM_yolov5/trained_models/
