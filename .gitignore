@@ -5,3 +5,5 @@ RCM_yolov5/yolov5s.pt
 RCM_yolov5/__pycache__/
 RCM_yolov5/runs/
 RCM_yolov5/trained_models/
+
+.vscode
