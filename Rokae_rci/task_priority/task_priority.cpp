@@ -129,7 +129,18 @@ void task_priority_debug()
 
     q = t.nextStep(T, J, tau, q, dq);
 
-    std::cout << q << std::endl;
-    std::cout << t.error() << std::endl;
+    std::cout << "q:" << std::endl << q << std::endl;
+    std::cout << "error:" << std::endl << t.error() << std::endl;
+
+    clock_t start_time = clock();
+    for(int i = 0; i < 10000; i++)
+    {
+        VectorXd q_desired = t.nextStep(T, J, tau, q, dq);
+        VectorXd error = t.error();
+    }
+    clock_t end_time = clock();
+
+    std::cout << "spend time(10000 times): " << (double)(end_time - start_time) / CLOCKS_PER_SEC << std::endl;
+
 }
 #endif

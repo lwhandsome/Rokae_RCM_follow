@@ -116,15 +116,13 @@ int main(int argc, char *argv[]) {
 
         runner_count++;
 
-        if(runner_count >= calculate_interval)
+        if(runner_count == calculate_interval)
         {
             runner_count = 0;
-	    
-            q_command = q_desired;
-            
+	        
             q_now = Map<Matrix<double, 7, 1>>(robot_state.q.data());
             dq_now = Map<Matrix<double, 7, 1>>(robot_state.dq_m.data());
-	    dq_now = (q_now - q_last) / (0.001 * calculate_interval);
+	        // dq_now = (q_now - q_last) / (0.001 * calculate_interval);
             T = Map<Matrix<double, 4, 4, RowMajor>>(robot_state.toolTobase_pos_m.data());
             J = Map<Matrix<double, 6, 7, RowMajor>>(xmatemodel.Jacobian(robot_state.q, SegmentFrame::kFlange).data());
             
@@ -145,10 +143,8 @@ int main(int argc, char *argv[]) {
 
             q_last = q_now;
         }
-        else
-        {
-            q_command = runner_count / calculate_interval * (q_desired - q_last) + q_last;
-        }
+
+        q_command = (runner_count + 1) / calculate_interval * (q_desired - q_last) + q_last;
 
         // std::cout << "q_command:" << std::endl << q_command << std::endl;
 
