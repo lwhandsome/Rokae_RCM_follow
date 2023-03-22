@@ -12,4 +12,4 @@ add_subdirectory(examples)
 
 add_subdirectory(rcm_follow)
 
-
+add_subdirectory(task_priority)

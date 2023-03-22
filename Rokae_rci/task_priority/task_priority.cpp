@@ -21,7 +21,7 @@ VectorXd TaskPriorityModel::nextStep(MatrixXd &T, MatrixXd &J, VectorXd &tau, Ve
     // Lambda：p_rcm = p_end + Lambda * v
     double x1 = -v.cross(w).norm() / v.norm();
     double Lambda = w.dot(v) / (v.transpose() * v);
-    
+
     // D_hat：p_rcm指向p_trocar的向量（归一化处理）
     Vector3d D_hat = w - Lambda * v;
     if(D_hat.norm() < 0.0001)

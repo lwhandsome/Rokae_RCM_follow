@@ -56,12 +56,13 @@ void Runner::calcNext()
         cv.wait(lock_p, [this] {
             return m_ready || stop_flag;
         });
-        MatrixXd T = m_T, J = m_J;
+	
+	MatrixXd T = m_T, J = m_J;
         VectorXd tau = m_tau, q = m_q, dq = m_dq;
         m_ready = false;
         lock_p.unlock();
 
-        if (tau.array().abs().maxCoeff() > 2)
+        if (tau.array().abs().maxCoeff() > 0)
         {
             VectorXd q_desired = m_model->nextStep(T, J, tau, q, dq);
             VectorXd error = m_model->error();

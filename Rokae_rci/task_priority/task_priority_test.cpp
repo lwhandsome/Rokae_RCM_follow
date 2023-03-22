@@ -52,7 +52,7 @@ int main(int argc, char *argv[]) {
     MOVEJ(0.2,INIT_q_now,INIT_q_desired,robot);
 
     MatrixXd INIT_T = Map<Matrix<double, 4, 4, RowMajor>>(xmatemodel.GetCartPose(INIT_q_desired, SegmentFrame::kFlange).data());
-    std::cout << "INIT_T: " << std::endl << INIT_T(i, j) << std::endl;
+    std::cout << "INIT_T: " << std::endl << INIT_T << std::endl;
 
     // 求trocar点
     Vector3d p_trocar = INIT_T.block<3, 1>(0, 3) + 0.2 *  INIT_T.block<3, 1>(0, 2);
@@ -98,7 +98,8 @@ int main(int argc, char *argv[]) {
 
     std::array<double,7> tau_init = robot.receiveRobotState().tau_m;     // 读取机械臂关节力矩
 
-    xmatemodel.GetTauWithFriction(mass, cog, inertia, robot.receiveRobotState().q, dq, ddq, tau_full_init, tau_inertial_init, tau_coriolis_init, tau_friction_init,tau_gravity_init);
+    std::array<double,7> q = robot.receiveRobotState().q;
+    xmatemodel.GetTauWithFriction(mass, cog, inertia, q, dq, ddq, tau_full_init, tau_inertial_init, tau_coriolis_init, tau_friction_init,tau_gravity_init);
     tau_del = Map<Matrix<double, 7, 1>>(tau_full_init.data()) - Map<Matrix<double, 7, 1>>(tau_init.data()); // 机械臂方向统一,tau取负号
     std::cout<< "tau_del: "<<tau_del[0]<<", "<<tau_del[1]<<", "<<tau_del[2]<<", "<<tau_del[3]<<", "<<tau_del[4]<<", "<<tau_del[5]<<", "<<tau_del[6]<<std::endl;
 
@@ -118,10 +119,12 @@ int main(int argc, char *argv[]) {
         if(runner_count >= calculate_interval)
         {
             runner_count = 0;
+	    
             q_command = q_desired;
-
+            
             q_now = Map<Matrix<double, 7, 1>>(robot_state.q.data());
-            dq_now = (q_now - q_last) / (0.001 * calculate_interval);
+            dq_now = Map<Matrix<double, 7, 1>>(robot_state.dq_m.data());
+	    dq_now = (q_now - q_last) / (0.001 * calculate_interval);
             T = Map<Matrix<double, 4, 4, RowMajor>>(robot_state.toolTobase_pos_m.data());
             J = Map<Matrix<double, 6, 7, RowMajor>>(xmatemodel.Jacobian(robot_state.q, SegmentFrame::kFlange).data());
             
@@ -134,11 +137,11 @@ int main(int argc, char *argv[]) {
             joint_list.push_back(q_now);
             // std::cout << "tau:" << std::endl << tau << std::endl;     
             runner.setParameters(T, J, tau, q_now, dq_now);
-
+	
             // q_command = runner.getResult();
             runner.getResult(q_desired, error); // 获得误差
             // std::cout << "q_desired:" << std::endl << q_desired << std::endl;
-            // std::cout << "error: " << error << std::endl << std::endl;
+            std::cout << "error: "<< std::endl << error << std::endl << std::endl;
 
             q_last = q_now;
         }
@@ -147,7 +150,7 @@ int main(int argc, char *argv[]) {
             q_command = runner_count / calculate_interval * (q_desired - q_last) + q_last;
         }
 
-        std::cout << "q_command:" << std::endl << q_command << std::endl;
+        // std::cout << "q_command:" << std::endl << q_command << std::endl;
 
         if (dq_now.array().abs().maxCoeff() > 2 * PI)
         {
