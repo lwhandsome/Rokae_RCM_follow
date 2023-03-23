@@ -12,7 +12,7 @@ class TaskPriorityModel : public ModelBase
 public:
     TaskPriorityModel() = default;
 
-    TaskPriorityModel(int n, Vector3d &p_trocar, Vector3d &p_desired, double dt, MatrixXd &K, MatrixXd &D, int mode);
+    TaskPriorityModel(int n, Vector3d &p_trocar, Vector3d &p_desired, double dt, MatrixXd &K, MatrixXd &D, int mode = 0);
 
     void changePositionDesired(Vector3d &p_desired);
 

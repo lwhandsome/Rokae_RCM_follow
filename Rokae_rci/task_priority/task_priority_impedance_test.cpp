@@ -58,21 +58,20 @@ int main(int argc, char *argv[]) {
     Vector3d p_trocar = INIT_T.block<3, 1>(0, 3) + 0.2 *  INIT_T.block<3, 1>(0, 2);
     std::cout << "Trocar_Point: " << std::endl << p_trocar << std::endl;
     // 求disired点
-    Vector3d p_desired = INIT_T.block<3, 1>(0, 3) + Vector3d{{-0.01, 0, 0}};
+    Vector3d p_desired = INIT_T.block<3, 1>(0, 3) + Vector3d{{-0.05, 0, 0}};
     std::cout << "Desired_Point: " << std::endl << p_desired << std::endl;
     
     // 模型参数定义
-    MatrixXd K = DiagonalMatrix<double, 4>(10, 10, 10, 10);
-    MatrixXd D = DiagonalMatrix<double, 4>(20, 20, 20, 20);
-    int calculate_interval = 5;
-    TaskPriorityModel model(7, p_trocar, p_desired, 0.001 * calculate_interval, K, D, 1);
+    MatrixXd K = DiagonalMatrix<double, 4>(300, 500, 500, 500);
+    MatrixXd D = DiagonalMatrix<double, 4>(6, 6, 6, 6);
+    TaskPriorityModel model(7, p_trocar, p_desired, 0.001, K, D, 1);
 
     //开始运动前先设置控制模式和运动模式
     robot.startMove(RCI::robot::StartMoveRequest::ControllerMode::kTorque,
                     RCI::robot::StartMoveRequest::MotionGeneratorMode::kIdle);
     
     // RUNNER 部分
-    double time = 0, runner_count = 0;
+    double time = 0;
     VectorXd q_now(7), dq_now(7), tau_desired(7);
     std::array<double, 7> tau_d_array;
     VectorXd error = MatrixXd::Zero(4, 1);
@@ -112,8 +111,6 @@ int main(int argc, char *argv[]) {
         
         time += 0.001;
 
-        runner_count++;
-
         q_now = Map<Matrix<double, 7, 1>>(robot_state.q.data());
         dq_now = Map<Matrix<double, 7, 1>>(robot_state.dq_m.data());
 
@@ -123,16 +120,14 @@ int main(int argc, char *argv[]) {
         for(int i = 0; i < 7; i++) tau[i] -= tau_del[i];
         // std::cout << "tau:" << std::endl << tau << std::endl; 
 
-        if(runner_count == calculate_interval)
-        {
-            runner_count = 0;
+        T = Map<Matrix<double, 4, 4, RowMajor>>(robot_state.toolTobase_pos_m.data());
+        J = Map<Matrix<double, 6, 7, RowMajor>>(xmatemodel.Jacobian(robot_state.q, SegmentFrame::kFlange).data());
 
-            T = Map<Matrix<double, 4, 4, RowMajor>>(robot_state.toolTobase_pos_m.data());
-            J = Map<Matrix<double, 6, 7, RowMajor>>(xmatemodel.Jacobian(robot_state.q, SegmentFrame::kFlange).data());
+        tau_desired = model.nextStep(T, J, tau, q_now, dq_now);
+        error = model.error();
 
-            tau_desired = model.nextStep(T, J, tau, q_now, dq_now);
-            error = model.error();
-        }
+        // std::cout << tau_desired << std::endl << std::endl;
+        // tau_desired = MatrixXd::Zero(7, 1);
 
         Eigen::VectorXd::Map(&tau_d_array[0], 7) = tau_desired;
 
@@ -150,7 +145,7 @@ int main(int argc, char *argv[]) {
           return MotionFinished(output);
         }
 
-        if (time < 30)
+        if (time < 60)
         {
             output.tau_c = tau_d_array;
         }

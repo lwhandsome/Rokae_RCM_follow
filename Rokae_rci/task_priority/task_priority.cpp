@@ -2,7 +2,7 @@
 
 using namespace Eigen;
 
-TaskPriorityModel::TaskPriorityModel(int n, Vector3d &p_trocar, Vector3d &p_desired, double dt, MatrixXd &K, MatrixXd &D, int mode = 0):
+TaskPriorityModel::TaskPriorityModel(int n, Vector3d &p_trocar, Vector3d &p_desired, double dt, MatrixXd &K, MatrixXd &D, int mode):
     m_n(n), m_p_trocar(p_trocar), m_p_desired(p_desired), m_dt(dt), m_K(K), m_D(D), m_mode(mode)
 {
     if(n != 7) throw;
@@ -86,12 +86,22 @@ VectorXd TaskPriorityModel::nextStep(MatrixXd &T, MatrixXd &J, VectorXd &tau, Ve
     }
     else if(m_mode == 1)
     {
-        // task_priority 计算tau
-        MatrixXd J1_inv = pinv_eigen_based(J1);
-        MatrixXd J2_bar = J2 * (MatrixXd::Identity(7, 7) - J1_inv * J1);
+        // // task_priority 计算tau
+        // MatrixXd J1_inv = pinv_eigen_based(J1);
+        // MatrixXd J2_bar = J2 * (MatrixXd::Identity(7, 7) - J1_inv * J1);
 
-        return J1.transpose() * (-m_D(0, 0) * dx1 - m_K(0, 0) * x1) + 
-            J2_bar.transpose() * (-m_D.block<3, 3>(1, 1) * dx2 - m_K.block<3, 3>(1, 1) * x2);
+        // return J1.transpose() * (-m_D(0, 0) * dx1 - m_K(0, 0) * x1) + 
+        //     J2_bar.transpose() * (-m_D.block<3, 3>(1, 1) * dx2 - m_K.block<3, 3>(1, 1) * x2);
+        
+        // extend task
+        MatrixXd J_ext(4, 7);
+        VectorXd dx_ext(4), x_ext(4);
+        J_ext << J1, J2;
+        dx_ext << dx1, dx2;
+        x_ext << x1, x2;
+
+        return J_ext.transpose() * (-m_D * dx_ext - m_K * x_ext);
+        
     }
     else throw;
 }
