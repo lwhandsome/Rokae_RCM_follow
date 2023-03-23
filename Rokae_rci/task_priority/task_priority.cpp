@@ -89,11 +89,11 @@ VectorXd TaskPriorityModel::nextStep(MatrixXd &T, MatrixXd &J, VectorXd &tau, Ve
         // task_priority 计算tau
         MatrixXd J1_inv = pinv_eigen_based(J1);
         MatrixXd J2_bar = J2 * (MatrixXd::Identity(7, 7) - J1_inv * J1);
-        VectorXd tau = J1.transpose() * (m_D(0, 0) * dx1 + m_K(0, 0) * x1) + 
-                    J2_bar.transpose() * (m_D.block<3, 3>(1, 1) * dx2 + m_K.block<3, 3>(1, 1) * x2);
 
-        return tau;
+        return J1.transpose() * (-m_D(0, 0) * dx1 - m_K(0, 0) * x1) + 
+            J2_bar.transpose() * (-m_D.block<3, 3>(1, 1) * dx2 - m_K.block<3, 3>(1, 1) * x2);
     }
+    else throw;
 }
 
 VectorXd TaskPriorityModel::error()
