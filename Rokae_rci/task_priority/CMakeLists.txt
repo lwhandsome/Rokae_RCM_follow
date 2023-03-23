@@ -10,7 +10,8 @@ LINK_DIRECTORIES(
 )
 
 set(TASK_PRIORITY
-  task_priority_test
+  task_priority_admittance_test
+  task_priority_impedance_test
 )
 
 foreach(example ${TASK_PRIORITY})

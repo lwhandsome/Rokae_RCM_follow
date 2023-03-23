@@ -117,21 +117,21 @@ int main(int argc, char *argv[]) {
 
         runner_count++;
 
+        q_now = Map<Matrix<double, 7, 1>>(robot_state.q.data());
+        dq_now = Map<Matrix<double, 7, 1>>(robot_state.dq_m.data());
+
+        xmatemodel.GetTauWithFriction(mass, cog, inertia, robot_state.q, dq, ddq, tau_full, tau_inertial, tau_coriolis, tau_friction, tau_gravity);
+        tau = Map<Matrix<double, 7, 1>>(tau_full.data()) - Map<Matrix<double, 7, 1>>(robot_state.tau_m.data()); // 机械臂方向统一,tau取负号
+        // 补偿
+        for(int i = 0; i < 7; i++) tau[i] -= tau_del[i];
+        // std::cout << "tau:" << std::endl << tau << std::endl; 
+
         if(runner_count == calculate_interval)
         {
             runner_count = 0;
-	        
-            q_now = Map<Matrix<double, 7, 1>>(robot_state.q.data());
-            dq_now = Map<Matrix<double, 7, 1>>(robot_state.dq_m.data());
-	        // dq_now = (q_now - q_last) / (0.001 * calculate_interval);
+
             T = Map<Matrix<double, 4, 4, RowMajor>>(robot_state.toolTobase_pos_m.data());
             J = Map<Matrix<double, 6, 7, RowMajor>>(xmatemodel.Jacobian(robot_state.q, SegmentFrame::kFlange).data());
-            
-            xmatemodel.GetTauWithFriction(mass, cog, inertia, robot_state.q, dq, ddq, tau_full, tau_inertial, tau_coriolis, tau_friction, tau_gravity);
-            tau = Map<Matrix<double, 7, 1>>(tau_full.data()) - Map<Matrix<double, 7, 1>>(robot_state.tau_m.data()); // 机械臂方向统一,tau取负号
-            // 补偿
-            for(int i = 0; i < 7; i++) tau[i] -= tau_del[i];
-            // std::cout << "tau:" << std::endl << tau << std::endl; 
 
             q_desired = model.nextStep(T, J, tau, q_now, dq_now);
             error = model.error();

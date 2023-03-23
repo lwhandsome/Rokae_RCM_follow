@@ -2,10 +2,13 @@
 
 using namespace Eigen;
 
-TaskPriorityModel::TaskPriorityModel(int n, Vector3d &p_trocar, Vector3d &p_desired, double dt, MatrixXd &K, MatrixXd &D):
-    m_n(n), m_p_trocar(p_trocar), m_p_desired(p_desired), m_dt(dt), m_K(K), m_D(D)
+TaskPriorityModel::TaskPriorityModel(int n, Vector3d &p_trocar, Vector3d &p_desired, double dt, MatrixXd &K, MatrixXd &D, int mode = 0):
+    m_n(n), m_p_trocar(p_trocar), m_p_desired(p_desired), m_dt(dt), m_K(K), m_D(D), m_mode(mode)
 {
     if(n != 7) throw;
+    // mode = 0: admittance control
+    // mode = 1: impedance control
+    if(mode != 0 && mode != 1) throw;
     m_error = MatrixXd::Zero(4, 1);
 }
 
@@ -47,8 +50,6 @@ VectorXd TaskPriorityModel::nextStep(MatrixXd &T, MatrixXd &J, VectorXd &tau, Ve
     
     // 计算dx1
     double dx1 = (J1 * dq)(0);
-    double ddx1 = -m_D(0, 0) * dx1 - m_K(0, 0) * x1;
-    dx1 = dx1 + ddx1 * m_dt;
 
     // task2 : cartesian admittance control
     Vector3d x2 = T.block<3, 1>(0, 3) - m_p_desired;
@@ -56,24 +57,43 @@ VectorXd TaskPriorityModel::nextStep(MatrixXd &T, MatrixXd &J, VectorXd &tau, Ve
     MatrixXd J2_T = J2.transpose();
     // 计算dx2
     Vector3d dx2 = J2 * dq;
-    Vector3d ddx2 = -m_D.block<3, 3>(1, 1) * dx2 - m_K.block<3, 3>(1, 1) * x2;
-    if (tau.array().abs().maxCoeff() > 5)
-    {
-        ddx2 += pinv_eigen_based(J2_T) * tau / 10;
-    }
-    dx2 = dx2 + ddx2 * m_dt;
 
-    // task_priority 计算dq
-    MatrixXd J1_inv = pinv_eigen_based(J1);
-    MatrixXd J2_bar = J2 * (MatrixXd::Identity(7, 7) - J1_inv * J1);
-    MatrixXd J2_bar_inv = pinv_eigen_based(J2_bar);
-    
-    VectorXd dq_next = J1_inv * dx1 + J2_bar_inv * (dx2 - J2 * (J1_inv * dx1));
-
+    // 记录误差
     m_error(0) = -x1;
     m_error.block<3, 1>(1, 0) = -x2;
 
-    return q + dq_next * m_dt;
+    if(m_mode == 0)
+    {
+        // 更新dx1
+        double ddx1 = -m_D(0, 0) * dx1 - m_K(0, 0) * x1;
+        dx1 = dx1 + ddx1 * m_dt;
+        
+        // 更新dx2
+        Vector3d ddx2 = -m_D.block<3, 3>(1, 1) * dx2 - m_K.block<3, 3>(1, 1) * x2;
+        if (tau.array().abs().maxCoeff() > 5)
+        {
+            ddx2 += pinv_eigen_based(J2_T) * tau / 10;
+        }
+        dx2 = dx2 + ddx2 * m_dt;
+
+        // task_priority 计算dq
+        MatrixXd J1_inv = pinv_eigen_based(J1);
+        MatrixXd J2_bar = J2 * (MatrixXd::Identity(7, 7) - J1_inv * J1);
+        MatrixXd J2_bar_inv = pinv_eigen_based(J2_bar);
+        VectorXd dq_next = J1_inv * dx1 + J2_bar_inv * (dx2 - J2 * (J1_inv * dx1));
+
+        return q + dq_next * m_dt;
+    }
+    else if(m_mode == 1)
+    {
+        // task_priority 计算tau
+        MatrixXd J1_inv = pinv_eigen_based(J1);
+        MatrixXd J2_bar = J2 * (MatrixXd::Identity(7, 7) - J1_inv * J1);
+        VectorXd tau = J1.transpose() * (m_D(0, 0) * dx1 + m_K(0, 0) * x1) + 
+                    J2_bar.transpose() * (m_D.block<3, 3>(1, 1) * dx2 + m_K.block<3, 3>(1, 1) * x2);
+
+        return tau;
+    }
 }
 
 VectorXd TaskPriorityModel::error()
