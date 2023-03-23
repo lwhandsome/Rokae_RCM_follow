@@ -9,6 +9,11 @@ TaskPriorityModel::TaskPriorityModel(int n, Vector3d &p_trocar, Vector3d &p_desi
     m_error = MatrixXd::Zero(4, 1);
 }
 
+void TaskPriorityModel::changePositionDesired(Vector3d &p_desired)
+{
+    m_p_desired = p_desired;
+}
+
 VectorXd TaskPriorityModel::nextStep(MatrixXd &T, MatrixXd &J, VectorXd &tau, VectorXd &q, VectorXd &dq)
 {
     // task1 : RCM constraint
@@ -48,11 +53,15 @@ VectorXd TaskPriorityModel::nextStep(MatrixXd &T, MatrixXd &J, VectorXd &tau, Ve
     // task2 : cartesian admittance control
     Vector3d x2 = T.block<3, 1>(0, 3) - m_p_desired;
     MatrixXd J2 = J.block<3, 7>(0, 0);
-
+    MatrixXd J2_T = J2.transpose();
     // 计算dx2
     Vector3d dx2 = J2 * dq;
     Vector3d ddx2 = -m_D.block<3, 3>(1, 1) * dx2 - m_K.block<3, 3>(1, 1) * x2;
-    dx2 = dx2 + ddx2 *  m_dt;
+    if (tau.array().abs().maxCoeff() > 5)
+    {
+        ddx2 += pinv_eigen_based(J2_T) * tau / 10;
+    }
+    dx2 = dx2 + ddx2 * m_dt;
 
     // task_priority 计算dq
     MatrixXd J1_inv = pinv_eigen_based(J1);
