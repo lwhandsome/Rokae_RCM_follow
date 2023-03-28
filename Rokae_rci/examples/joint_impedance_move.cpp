@@ -26,13 +26,12 @@ using namespace xmate;
 using JointControl = std::function<JointPositions(RCI::robot::RobotState robot_state)>;
 int main(int argc, char *argv[])
 {
-    std::string ipaddr = "192.168.3.41";
+    std::string ipaddr = "192.168.0.160";
     uint16_t port = 1337;
 
-    std::string file = "../../xmate.ini";
+    std::string file = "../xmate.ini";
     INIParser ini;
-    if (ini.ReadINI(file))
-    {
+    if (ini.ReadINI(file)) {
         ipaddr = ini.GetString("network", "ip");
         port = static_cast<uint16_t>(ini.GetInt("network", "port"));
     }

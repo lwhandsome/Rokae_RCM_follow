@@ -19,17 +19,18 @@
 #include "model.h"
 
 #include "task_priority.h"
+#include "tcp_recv.h"
 #include "runner.h"
 
 using namespace Eigen;
 using namespace xmate;
-using TorqueControl = std::function<Torques(RCI::robot::RobotState robot_state)>;
+using JointControl = std::function<JointPositions(RCI::robot::RobotState robot_state)>;
 
 int main(int argc, char *argv[]) {
     std::string ipaddr = "192.168.0.160";
     std::string name = "callback";
     uint16_t port = 1337;
-    std::string file = "../../xmate.ini";
+    std::string file = "../xmate.ini";
     INIParser ini;
     if (ini.ReadINI(file)) {
         ipaddr = ini.GetString("network", "ip");
@@ -44,6 +45,10 @@ int main(int argc, char *argv[]) {
     robot.setMotorPower(1);
 
     const double PI=3.14159;
+    MatrixXd F_T_Cam {{0, 0.86603, 0.5, 0},
+                    {-1, 0, 0, 0},
+                    {0, -0.5, 0.86603, 0.28},
+                    {0, 0, 0, 1}};
     //INIT 部分
     std::array<double,7> INIT_q_now, INIT_q_desired;
     // 移动到初始位置
@@ -54,30 +59,44 @@ int main(int argc, char *argv[]) {
     MatrixXd INIT_T = Map<Matrix<double, 4, 4, RowMajor>>(xmatemodel.GetCartPose(INIT_q_desired, SegmentFrame::kFlange).data());
     std::cout << "INIT_T: " << std::endl << INIT_T << std::endl;
 
+    MatrixXd INIT_T_Cam = INIT_T * F_T_Cam;
+    std::cout << "INIT_T_Cam: " << std::endl << INIT_T_Cam << std::endl;
+
     // 求trocar点
     Vector3d p_trocar = INIT_T.block<3, 1>(0, 3) + 0.2 *  INIT_T.block<3, 1>(0, 2);
     std::cout << "Trocar_Point: " << std::endl << p_trocar << std::endl;
     // 求disired点
-    Vector3d p_desired = INIT_T.block<3, 1>(0, 3) + Vector3d{{-0.05, 0, 0}};
+    Vector3d p_desired = INIT_T.block<3, 1>(0, 3);
     std::cout << "Desired_Point: " << std::endl << p_desired << std::endl;
     
     // 模型参数定义
-    MatrixXd K = DiagonalMatrix<double, 4>(300, 500, 500, 500);
-    MatrixXd D = DiagonalMatrix<double, 4>(6, 6, 6, 6);
-    TaskPriorityModel model(7, p_trocar, p_desired, 0.001, K, D, 1);
+    MatrixXd K = DiagonalMatrix<double, 4>(100, 50, 50, 50);
+    MatrixXd D = DiagonalMatrix<double, 4>(10, 20, 20, 20);
+    int calculate_interval = 12;
+    int follow_interval = calculate_interval * 12;
+    TaskPriorityModel model(7, p_trocar, p_desired, 0.001 * calculate_interval, K, D);
 
     //开始运动前先设置控制模式和运动模式
-    robot.startMove(RCI::robot::StartMoveRequest::ControllerMode::kTorque,
-                    RCI::robot::StartMoveRequest::MotionGeneratorMode::kIdle);
+    robot.startMove(RCI::robot::StartMoveRequest::ControllerMode::kJointPosition,
+                    RCI::robot::StartMoveRequest::MotionGeneratorMode::kJointPosition);
     
-    // RUNNER 部分
     double time = 0;
-    VectorXd q_now(7), dq_now(7), tau_desired(7);
-    std::array<double, 7> tau_d_array;
+    // Follow 部分
+    int follow_count = 0;
+    double follow_alpha = 0.002;
+    Vector3d delta_p;
+    Vector4d p_cam_ext;
+
+    LoopRecv loop_recv;
+    std::array<double, 2> recv_param{};
+
+    // Calculate 部分
+    int calculate_count = 0;
+    VectorXd q_now(7), q_last(7), q_desired(7), q_command(7), dq_now(7);
     VectorXd error = MatrixXd::Zero(4, 1);
     dq_now = MatrixXd::Zero(7, 1);
-    tau_desired = MatrixXd::Zero(7, 1);
-
+    q_last = Map<Matrix<double, 7, 1>>(robot.receiveRobotState().q.data());
+    q_desired = q_last;
     MatrixXd T(4, 4) ,J(6, 7);
     VectorXd tau(7);
     std::array<double,7> tau_full, tau_inertial, tau_coriolis, tau_friction, tau_gravity;
@@ -86,6 +105,9 @@ int main(int argc, char *argv[]) {
     double mass = 0.193;
     std::array<double, 3> cog {{0,0,0.065}};
     std::array<double, 9> inertia {{0,0,0,0,0,0,0,0,0}};
+
+    // Runner runner(model, q_last);
+    // runner.start();
 
     VectorXd tau_del(7);       // 零漂
     std::array<double,7> tau_full_init, tau_inertial_init, tau_coriolis_init, tau_friction_init, tau_gravity_init;   // 理论计算值
@@ -98,18 +120,22 @@ int main(int argc, char *argv[]) {
     std::cout<< "tau_del: "<<tau_del[0]<<", "<<tau_del[1]<<", "<<tau_del[2]<<", "<<tau_del[3]<<", "<<tau_del[4]<<", "<<tau_del[5]<<", "<<tau_del[6]<<std::endl;
 
     // record
-    std::vector<VectorXd> tau_list, tau_desired_list, q_now_list, error_list;
+    std::vector<VectorXd> tau_list, q_command_list, q_desired_list, q_now_list, error_list;
 
-    TorqueControl  torque_control_callback;
-    Torques output;
+    JointPositions output;
+    std::string joint_callback = "joint_callback";
+    JointControl joint_position_callback;
     std::cout << "start control!" << std::endl;
 
-    torque_control_callback = [&](RCI::robot::RobotState robot_state) -> Torques {
+    joint_position_callback = [&](RCI::robot::RobotState robot_state) -> JointPositions {
         if(robot_state.control_command_success_rate <0.9){
             std::cout<<"通信质量较差："<<robot_state.control_command_success_rate<<std::endl;
         }
         
         time += 0.001;
+
+        calculate_count++;
+        follow_count++;
 
         q_now = Map<Matrix<double, 7, 1>>(robot_state.q.data());
         dq_now = Map<Matrix<double, 7, 1>>(robot_state.dq_m.data());
@@ -120,21 +146,53 @@ int main(int argc, char *argv[]) {
         for(int i = 0; i < 7; i++) tau[i] -= tau_del[i];
         // std::cout << "tau:" << std::endl << tau << std::endl; 
 
-        T = Map<Matrix<double, 4, 4, RowMajor>>(robot_state.toolTobase_pos_m.data());
-        J = Map<Matrix<double, 6, 7, RowMajor>>(xmatemodel.Jacobian(robot_state.q, SegmentFrame::kFlange).data());
+        if(follow_count == follow_interval)
+        {
+            follow_count = 0;
+            loop_recv.getParam(recv_param);
+            
+            if(abs(recv_param[0]) > 1 || abs(recv_param[1]) > 1)
+            {
+                std::cout << "TCP Recv Data Error!" << std::endl;
+                recv_param.fill(0);
+            }
 
-        tau_desired = model.nextStep(T, J, tau, q_now, dq_now);
-        error = model.error();
+            // std::cout << recv_param[0] << ", " << recv_param[1] << std::endl;
 
-        // std::cout << tau_desired << std::endl << std::endl;
-        // tau_desired = MatrixXd::Zero(7, 1);
+            p_cam_ext << follow_alpha * recv_param[0], follow_alpha * recv_param[1], 0, 1;
+            delta_p << (F_T_Cam * p_cam_ext).block<2, 1>(0, 0), 0;
 
-        Eigen::VectorXd::Map(&tau_d_array[0], 7) = tau_desired;
+            p_desired = p_desired + delta_p;
+            model.changePositionDesired(p_desired);
+        }
+
+        if(calculate_count == calculate_interval)
+        {
+            calculate_count = 0;
+
+            T = Map<Matrix<double, 4, 4, RowMajor>>(robot_state.toolTobase_pos_m.data());
+            J = Map<Matrix<double, 6, 7, RowMajor>>(xmatemodel.Jacobian(robot_state.q, SegmentFrame::kFlange).data());
+
+            q_desired = model.nextStep(T, J, tau, q_now, dq_now);
+            error = model.error();
+            // runner.setParameters(T, J, tau, q_now, dq_now);
+	
+            // q_command = runner.getResult();
+            // runner.getResult(q_desired, error); // 获得误差
+            // std::cout << "q_desired:" << std::endl << q_desired << std::endl;
+            // std::cout << "error: "<< std::endl << error << std::endl << std::endl;
+
+            q_last = q_now;
+        }
+
+        //q_command = (calculate_count + 1) / calculate_interval * (q_desired - q_last) + q_last;
+        q_command = q_desired;
 
         // record
         tau_list.push_back(tau);
-        tau_desired_list.push_back(tau_desired);
         q_now_list.push_back(q_now);
+        q_desired_list.push_back(q_desired);
+        q_command_list.push_back(q_command);
         error_list.push_back(error);
 
         if (dq_now.array().abs().maxCoeff() > 2 * PI)
@@ -147,7 +205,8 @@ int main(int argc, char *argv[]) {
 
         if (time < 60)
         {
-            output.tau_c = tau_d_array;
+            // output = {{q_now[0], q_now[1], q_now[2], q_now[3], q_now[4], q_now[5], q_now[6]}};
+            output = {{q_command[0], q_command[1], q_command[2], q_command[3], q_command[4], q_command[5], q_command[6]}};
         }
         else
         {
@@ -158,8 +217,9 @@ int main(int argc, char *argv[]) {
         return output;        
     };
 
-    robot.Control(torque_control_callback);
+    robot.Control(joint_position_callback);
     robot.setMotorPower(0);
+    //runner.stop();
 
     // record
     std::ofstream ofs;
@@ -174,23 +234,34 @@ int main(int argc, char *argv[]) {
     }
     ofs.close();  
 
-    ofs.open("tau_desired_list.txt");
-    if (!ofs)
-    {
-        std::cout << "file open error!" << std::endl;
-    }
-    for(auto it = tau_desired_list.begin(); it != tau_desired_list.end(); it++)
-    {
-      ofs << (*it)[0] << " " << (*it)[1] << " " << (*it)[2] << " " << (*it)[3] << " " << (*it)[4] << " " << (*it)[5] << " " << (*it)[6] << std::endl;
-    }
-    ofs.close();
-
     ofs.open("q_now_list.txt");
     if (!ofs)
     {
         std::cout << "file open error!" << std::endl;
     }
     for(auto it = q_now_list.begin(); it != q_now_list.end(); it++)
+    {
+      ofs << (*it)[0] << " " << (*it)[1] << " " << (*it)[2] << " " << (*it)[3] << " " << (*it)[4] << " " << (*it)[5] << " " << (*it)[6] << std::endl;
+    }
+    ofs.close();
+
+    ofs.open("q_desired_list.txt");
+    if (!ofs)
+    {
+        std::cout << "file open error!" << std::endl;
+    }
+    for(auto it = q_desired_list.begin(); it != q_desired_list.end(); it++)
+    {
+      ofs << (*it)[0] << " " << (*it)[1] << " " << (*it)[2] << " " << (*it)[3] << " " << (*it)[4] << " " << (*it)[5] << " " << (*it)[6] << std::endl;
+    }
+    ofs.close();
+
+    ofs.open("q_command_list.txt");
+    if (!ofs)
+    {
+        std::cout << "file open error!" << std::endl;
+    }
+    for(auto it = q_command_list.begin(); it != q_command_list.end(); it++)
     {
       ofs << (*it)[0] << " " << (*it)[1] << " " << (*it)[2] << " " << (*it)[3] << " " << (*it)[4] << " " << (*it)[5] << " " << (*it)[6] << std::endl;
     }

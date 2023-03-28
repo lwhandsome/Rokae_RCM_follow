@@ -42,8 +42,8 @@ class Cap:
 if __name__ == '__main__':
     cam = Cap(cam_id=0)
     cam.start()
-    detector = Detector(classes=0, conf_thres=0.65, view_img=True)
-    sd = Sender('192.168.0.22')
+    detector = Detector(classes=0, conf_thres=0.75, view_img=True)
+    sd = Sender('127.0.0.1')
 
     try:
         while True:       
@@ -56,19 +56,19 @@ if __name__ == '__main__':
                 cam.stop()
                 break
             
-            
             px = 0
             py = 0
             max_conf = 0
             for *xyxy, conf, cls in reversed(det):
                 if conf < max_conf:
                     continue
-                
+                max_conf = conf
+
                 cx = (xyxy[0] + xyxy[2]) / 2
                 cy = (xyxy[1] + xyxy[3]) / 2
                 
-                px = -(cy.item() / 240 - 1)
-                py = -(cx.item() / 320 - 1)
+                px = -(cx.item() / 320 - 1)
+                py = cy.item() / 240 - 1
                 
                 # print(f"classes: {cls}, conf: {conf}, center: ({cx}, {cy}) -> ({px}, {py})")
 

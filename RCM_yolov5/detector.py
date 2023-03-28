@@ -23,8 +23,8 @@ from utils.torch_utils import select_device, smart_inference_mode
 
 class Detector:
     def __init__(self,
-            weights=ROOT / 'trained_models/version1/best_50.pt',  # model path or triton URL
-            data=ROOT / 'trained_models/version1/data.yaml',  # dataset.yaml path
+            weights=ROOT / 'trained_models/best.pt',  # model path or triton URL
+            data=ROOT / 'trained_models/data.yaml',  # dataset.yaml path
             imgsz=(640, 640),  # inference size (height, width)
             conf_thres=0.25,  # confidence threshold
             iou_thres=0.45,  # NMS IOU threshold

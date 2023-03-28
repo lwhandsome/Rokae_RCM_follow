@@ -10,12 +10,13 @@ LINK_DIRECTORIES(
 )
 
 set(TASK_PRIORITY
-  task_priority_admittance_test
-  task_priority_impedance_test
+  test_task_priority_admittance
+  test_task_priority_impedance
+  follow_task_priority_admittance
 )
 
 foreach(example ${TASK_PRIORITY})
-  add_executable(${example} ${example}.cpp task_priority.cpp runner.cpp)
+  add_executable(${example} ${example}.cpp task_priority.cpp runner.cpp tcp_recv.cpp)
   TARGET_LINK_LIBRARIES(${example}  
     RCI_Client.a
     xMateModel.a

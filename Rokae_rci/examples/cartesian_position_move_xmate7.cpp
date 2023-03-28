@@ -28,6 +28,13 @@ int main(int argc, char *argv[]) {
     std::string ipaddr = "192.168.0.160";
     uint16_t port = 1337;
 
+    std::string file = "../xmate.ini";
+    INIParser ini;
+    if (ini.ReadINI(file)) {
+        ipaddr = ini.GetString("network", "ip");
+        port = static_cast<uint16_t>(ini.GetInt("network", "port"));
+    }
+
     xmate::Robot robot(ipaddr, port,XmateType::XMATE3);
     sleep(1);
     robot.setMotorPower(1);

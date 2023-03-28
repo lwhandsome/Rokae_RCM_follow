@@ -27,9 +27,9 @@ using namespace xmate;
 using JointControl = std::function<JointPositions(RCI::robot::RobotState robot_state)>;
 int main(int argc, char *argv[]) {
     std::string ipaddr = "192.168.0.160";
-    uint16_t port = 1338;
+    uint16_t port = 1337;
 
-    std::string file = "../../xmate.ini";
+    std::string file = "../xmate.ini";
     INIParser ini;
     if (ini.ReadINI(file)) {
         ipaddr = ini.GetString("network", "ip");

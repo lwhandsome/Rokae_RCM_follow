@@ -29,7 +29,7 @@ int main(int argc, char *argv[]) {
     std::string ipaddr = "192.168.0.160";
     std::string name = "callback";
     uint16_t port = 1337;
-    std::string file = "../../xmate.ini";
+    std::string file = "../xmate.ini";
     INIParser ini;
     if (ini.ReadINI(file)) {
         ipaddr = ini.GetString("network", "ip");
