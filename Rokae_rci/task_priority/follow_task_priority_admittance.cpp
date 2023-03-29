@@ -83,7 +83,7 @@ int main(int argc, char *argv[]) {
     double time = 0;
     // Follow 部分
     int follow_count = 0;
-    double follow_alpha = 0.002;
+    double follow_alpha = 0.1;
     Vector3d delta_p;
     Vector4d p_cam_ext;
 
@@ -139,6 +139,7 @@ int main(int argc, char *argv[]) {
 
         q_now = Map<Matrix<double, 7, 1>>(robot_state.q.data());
         dq_now = Map<Matrix<double, 7, 1>>(robot_state.dq_m.data());
+        T = Map<Matrix<double, 4, 4, RowMajor>>(robot_state.toolTobase_pos_m.data());
 
         xmatemodel.GetTauWithFriction(mass, cog, inertia, robot_state.q, dq, ddq, tau_full, tau_inertial, tau_coriolis, tau_friction, tau_gravity);
         tau = Map<Matrix<double, 7, 1>>(tau_full.data()) - Map<Matrix<double, 7, 1>>(robot_state.tau_m.data()); // 机械臂方向统一,tau取负号
@@ -150,19 +151,23 @@ int main(int argc, char *argv[]) {
         {
             follow_count = 0;
             loop_recv.getParam(recv_param);
-            
+
             if(abs(recv_param[0]) > 1 || abs(recv_param[1]) > 1)
             {
                 std::cout << "TCP Recv Data Error!" << std::endl;
                 recv_param.fill(0);
             }
 
+            if(abs(recv_param[0]) < 0.1 && abs(recv_param[1]) < 0.1)
+            {
+                recv_param.fill(0);
+            }
             // std::cout << recv_param[0] << ", " << recv_param[1] << std::endl;
 
             p_cam_ext << follow_alpha * recv_param[0], follow_alpha * recv_param[1], 0, 1;
             delta_p << (F_T_Cam * p_cam_ext).block<2, 1>(0, 0), 0;
 
-            p_desired = p_desired + delta_p;
+            p_desired = T.block<3, 1>(0, 3) + delta_p;
             model.changePositionDesired(p_desired);
         }
 
@@ -170,7 +175,6 @@ int main(int argc, char *argv[]) {
         {
             calculate_count = 0;
 
-            T = Map<Matrix<double, 4, 4, RowMajor>>(robot_state.toolTobase_pos_m.data());
             J = Map<Matrix<double, 6, 7, RowMajor>>(xmatemodel.Jacobian(robot_state.q, SegmentFrame::kFlange).data());
 
             q_desired = model.nextStep(T, J, tau, q_now, dq_now);
@@ -220,6 +224,7 @@ int main(int argc, char *argv[]) {
     robot.Control(joint_position_callback);
     robot.setMotorPower(0);
     //runner.stop();
+    loop_recv.stop();
 
     // record
     std::ofstream ofs;

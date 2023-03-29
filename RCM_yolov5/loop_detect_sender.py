@@ -44,6 +44,10 @@ if __name__ == '__main__':
     cam.start()
     detector = Detector(classes=0, conf_thres=0.75, view_img=True)
     sd = Sender('127.0.0.1')
+    windows_name = "monitor"
+    cv2.namedWindow(windows_name, cv2.WINDOW_NORMAL)
+    cv2.moveWindow(windows_name, 1920, 0)
+    cv2.setWindowProperty(windows_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     try:
         while True:       
@@ -51,7 +55,7 @@ if __name__ == '__main__':
             
             det, im0 = detector.run(img)
             
-            cv2.imshow("monitor", im0)
+            cv2.imshow(windows_name, im0)
             if cv2.waitKey(1) == 27:
                 cam.stop()
                 break
@@ -71,9 +75,11 @@ if __name__ == '__main__':
                 py = cy.item() / 240 - 1
                 
                 # print(f"classes: {cls}, conf: {conf}, center: ({cx}, {cy}) -> ({px}, {py})")
-
+            
             sd.sendvec(px, py)
     except KeyboardInterrupt:
-        pass
+        print("Keyboard Interrupt!")
+    except ConnectionResetError:
+        print("Connection Lost!")
     cam.stop()
     sd.close()
